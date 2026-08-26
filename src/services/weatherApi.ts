@@ -1,17 +1,8 @@
 export type WeatherForecastPoint = {
   timestamp: number;
   temperature: number;
-  feels_like: number;
-  humidity: number;
-  pressure: number;
-  description: string;
-  weather: string;
-  icon: string;
   wind_speed: number;
-  wind_direction: number;
-  wind_gust?: number;
-  cloud_cover: number;
-  probability_of_precipitation: number;
+  pop: number;
   rain_3h: number;
 };
 

@@ -217,20 +217,8 @@ def normalize_forecast_point(
         {},
     )
 
-    weather_items = (
-        item.get("weather")
-        or [{}]
-    )
-
-    weather = weather_items[0]
-
     wind = item.get(
         "wind",
-        {},
-    )
-
-    clouds = item.get(
-        "clouds",
         {},
     )
 
@@ -248,47 +236,11 @@ def normalize_forecast_point(
             "temp"
         ),
 
-        "feels_like": main.get(
-            "feels_like"
-        ),
-
-        "humidity": main.get(
-            "humidity"
-        ),
-
-        "pressure": main.get(
-            "pressure"
-        ),
-
-        "description": weather.get(
-            "description"
-        ),
-
-        "weather": weather.get(
-            "main"
-        ),
-
-        "icon": weather.get(
-            "icon"
-        ),
-
         "wind_speed": wind.get(
             "speed"
         ),
 
-        "wind_direction": wind.get(
-            "deg"
-        ),
-
-        "wind_gust": wind.get(
-            "gust"
-        ),
-
-        "cloud_cover": clouds.get(
-            "all"
-        ),
-
-        "probability_of_precipitation": item.get(
+        "pop": item.get(
             "pop",
             0,
         ),
