@@ -28,10 +28,6 @@ import {
   WeatherValidationResponse,
 } from "../services/weatherApi";
 
-import {
-  formatForecastTime,
-} from "../utils/dateTime";
-
 
 export type TemperatureChartPoint = {
   timestamp: number;
@@ -40,7 +36,7 @@ export type TemperatureChartPoint = {
 
 
 type Props = {
-  data: TemperatureChartPoint[];
+  data?: TemperatureChartPoint[];
   timeZone: string;
 };
 
@@ -87,6 +83,10 @@ const FORECAST_STYLES: ForecastStyle[] = [
 ];
 
 
+const ACTUAL_COLOR = "#7c3aed";
+const HOUR_WIDTH = 11;
+
+
 function getRouteCity(
   value: string | string[] | undefined
 ) {
@@ -100,33 +100,67 @@ function getRouteCity(
 
 function getActualPath(
   data: TemperatureValidationPoint[],
-  getX: (index: number) => number,
+  getX: (timestamp: number) => number,
   getY: (temperature: number) => number
 ) {
   const commands: string[] = [];
   let drawing = false;
 
-  data.forEach(
-    (point, index) => {
-      if (
-        point.actual_temperature === null
-      ) {
-        drawing = false;
-        return;
-      }
-
-      const command =
-        drawing ? "L" : "M";
-
-      commands.push(
-        `${command} ${getX(index)} ${getY(point.actual_temperature)}`
-      );
-
-      drawing = true;
+  data.forEach((point) => {
+    if (
+      point.actual_temperature === null
+    ) {
+      drawing = false;
+      return;
     }
-  );
+
+    const command =
+      drawing ? "L" : "M";
+
+    commands.push(
+      `${command} ${getX(point.timestamp)} ${getY(point.actual_temperature)}`
+    );
+
+    drawing = true;
+  });
 
   return commands.join(" ");
+}
+
+
+function getLocalDateKey(
+  timestamp: number,
+  timeZone: string
+) {
+  return new Intl.DateTimeFormat(
+    "en-CA",
+    {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }
+  ).format(
+    new Date(timestamp * 1000)
+  );
+}
+
+
+function formatDayLabel(
+  timestamp: number,
+  timeZone: string
+) {
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      timeZone,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    }
+  ).format(
+    new Date(timestamp * 1000)
+  );
 }
 
 
@@ -197,7 +231,17 @@ export default function TemperatureChart({
   }, [citySlug]);
 
 
-  const data = validation?.points ?? [];
+  const data = useMemo(
+    () => (
+      [...(validation?.points ?? [])]
+        .sort(
+          (a, b) =>
+            a.timestamp - b.timestamp
+        )
+    ),
+    [validation]
+  );
+
 
   const temperatures = useMemo(
     () => {
@@ -267,24 +311,46 @@ export default function TemperatureChart({
   }
 
 
-  const chartWidth = 1480;
-  const chartHeight = 360;
-
   const paddingLeft = 58;
   const paddingRight = 24;
   const paddingTop = 24;
-  const paddingBottom = 66;
+  const paddingBottom = 76;
 
+  // The old plot was about 270 px tall.
+  // 540 px gives the requested 2x vertical magnification.
+  const plotHeight = 540;
+  const chartHeight =
+    paddingTop +
+    plotHeight +
+    paddingBottom;
 
+  const firstTimestamp =
+    data[0].timestamp;
+
+  const lastTimestamp =
+    data[data.length - 1].timestamp;
+
+  const totalHours = Math.max(
+    (
+      lastTimestamp -
+      firstTimestamp
+    ) / 3600,
+    1
+  );
+
+  // A true time scale:
+  // every hour always occupies HOUR_WIDTH pixels.
   const plotWidth =
-    chartWidth -
-    paddingLeft -
+    totalHours * HOUR_WIDTH;
+
+  const chartWidth =
+    paddingLeft +
+    plotWidth +
     paddingRight;
 
-  const plotHeight =
-    chartHeight -
-    paddingTop -
-    paddingBottom;
+  const plotBottom =
+    paddingTop +
+    plotHeight;
 
 
   const minTemp =
@@ -304,33 +370,32 @@ export default function TemperatureChart({
 
 
   const getX = (
-    index: number
-  ) => {
-    const denominator = Math.max(
-      data.length - 1,
-      1
-    );
-
-    return (
-      paddingLeft +
-      (index / denominator) *
-        plotWidth
-    );
-  };
+    timestamp: number
+  ) => (
+    paddingLeft +
+    (
+      (
+        timestamp -
+        firstTimestamp
+      ) / 3600
+    ) *
+      HOUR_WIDTH
+  );
 
 
   const getY = (
     temperature: number
-  ) => {
-    return (
-      paddingTop +
+  ) => (
+    paddingTop +
+    (
       (
-        (maxTemp - temperature)
-        / range
-      ) *
-        plotHeight
-    );
-  };
+        maxTemp -
+        temperature
+      ) /
+      range
+    ) *
+      plotHeight
+  );
 
 
   const actualPath = getActualPath(
@@ -342,66 +407,121 @@ export default function TemperatureChart({
 
   const gridValues = [
     maxTemp,
-    maxTemp - range * 0.25,
-    maxTemp - range * 0.5,
-    maxTemp - range * 0.75,
+    maxTemp -
+      range * 0.25,
+    maxTemp -
+      range * 0.5,
+    maxTemp -
+      range * 0.75,
     minTemp,
   ];
 
 
-  const daySeparatorIndexes =
-    data.reduce<number[]>(
-      (indexes, point, index) => {
-        if (index === 0) {
-          return indexes;
-        }
+  const firstWholeHour =
+    Math.ceil(
+      firstTimestamp / 3600
+    ) * 3600;
 
-        const previousLabel =
-          new Intl.DateTimeFormat(
-            "en-US",
-            {
-              timeZone,
-              year: "numeric",
-              month: "2-digit",
-              day: "2-digit",
-            }
-          ).format(
-            new Date(
-              data[index - 1].timestamp * 1000
-            )
-          );
+  const lastWholeHour =
+    Math.floor(
+      lastTimestamp / 3600
+    ) * 3600;
 
-        const currentLabel =
-          new Intl.DateTimeFormat(
-            "en-US",
-            {
-              timeZone,
-              year: "numeric",
-              month: "2-digit",
-              day: "2-digit",
-            }
-          ).format(
-            new Date(
-              point.timestamp * 1000
-            )
-          );
+  const hourlyTicks: number[] = [];
 
-        if (
-          currentLabel !== previousLabel
-        ) {
-          indexes.push(index);
-        }
+  for (
+    let timestamp = firstWholeHour;
+    timestamp <= lastWholeHour;
+    timestamp += 3600
+  ) {
+    hourlyTicks.push(timestamp);
+  }
 
-        return indexes;
-      },
-      []
+
+  const dayStarts: number[] = [];
+
+  for (
+    let index = 1;
+    index < hourlyTicks.length;
+    index += 1
+  ) {
+    const previousDate =
+      getLocalDateKey(
+        hourlyTicks[index - 1],
+        timeZone
+      );
+
+    const currentDate =
+      getLocalDateKey(
+        hourlyTicks[index],
+        timeZone
+      );
+
+    if (
+      currentDate !== previousDate
+    ) {
+      dayStarts.push(
+        hourlyTicks[index]
+      );
+    }
+  }
+
+
+  const dayBoundaries = [
+    firstTimestamp,
+    ...dayStarts.filter(
+      (timestamp) =>
+        timestamp > firstTimestamp
+        && timestamp < lastTimestamp
+    ),
+    lastTimestamp,
+  ]
+    .filter(
+      (
+        timestamp,
+        index,
+        values
+      ) =>
+        index === 0
+        || timestamp !==
+          values[index - 1]
     );
+
+
+  const daySegments =
+    dayBoundaries
+      .slice(0, -1)
+      .map(
+        (
+          startTimestamp,
+          index
+        ) => {
+          const endTimestamp =
+            dayBoundaries[index + 1];
+
+          const middleTimestamp =
+            startTimestamp +
+            (
+              endTimestamp -
+              startTimestamp
+            ) / 2;
+
+          return {
+            startTimestamp,
+            endTimestamp,
+            label: formatDayLabel(
+              middleTimestamp,
+              timeZone
+            ),
+          };
+        }
+      );
 
 
   return (
     <View style={styles.container}>
       <Text style={styles.explainer}>
-        Past 7 days · actual temperature versus forecasts made 1–5 days earlier
+        Actual temperature versus forecasts made 1–5 days earlier
       </Text>
 
       <View style={styles.legend}>
@@ -478,19 +598,34 @@ export default function TemperatureChart({
           )}
 
 
-          {daySeparatorIndexes.map(
-            (index) => (
+          {/* One small x-axis tick per hour. */}
+          {hourlyTicks.map(
+            (timestamp) => (
               <Line
-                key={`day-${index}`}
-                x1={getX(index)}
+                key={`hour-${timestamp}`}
+                x1={getX(timestamp)}
+                y1={plotBottom}
+                x2={getX(timestamp)}
+                y2={plotBottom + 5}
+                stroke="#cbd5e1"
+                strokeWidth={0.8}
+              />
+            )
+          )}
+
+
+          {/* Local midnight separators. */}
+          {dayStarts.map(
+            (timestamp) => (
+              <Line
+                key={`day-${timestamp}`}
+                x1={getX(timestamp)}
                 y1={paddingTop}
-                x2={getX(index)}
-                y2={
-                  chartHeight -
-                  paddingBottom
-                }
-                stroke="#eef2f6"
-                strokeWidth={1}
+                x2={getX(timestamp)}
+                y2={plotBottom + 10}
+                stroke="#98a2b3"
+                strokeWidth={1.1}
+                strokeDasharray={[5, 5]}
               />
             )
           )}
@@ -529,8 +664,9 @@ export default function TemperatureChart({
           <Path
             d={actualPath}
             fill="none"
-            stroke="#0f172a"
-            strokeWidth={2.75}
+            stroke={ACTUAL_COLOR}
+            strokeOpacity={0.62}
+            strokeWidth={1.5}
             strokeLinejoin="round"
             strokeLinecap="round"
           />
@@ -539,94 +675,96 @@ export default function TemperatureChart({
           {[...FORECAST_STYLES]
             .reverse()
             .map((style) =>
-              data.map(
-                (point, index) => {
-                  const forecast =
-                    point.forecasts.find(
-                      (candidate) =>
-                        candidate.days_ahead
-                        === style.daysAhead
-                    );
-
-                  if (
-                    forecast?.temperature
-                    === null
-                    || forecast?.temperature
-                    === undefined
-                  ) {
-                    return null;
-                  }
-
-                  return (
-                    <Circle
-                      key={`forecast-${style.daysAhead}-${point.timestamp}`}
-                      cx={getX(index)}
-                      cy={getY(
-                        forecast.temperature
-                      )}
-                      r={style.radius}
-                      fill={style.color}
-                      stroke="#ffffff"
-                      strokeWidth={1.1}
-                    />
+              data.map((point) => {
+                const forecast =
+                  point.forecasts.find(
+                    (candidate) =>
+                      candidate.days_ahead
+                      === style.daysAhead
                   );
+
+                if (
+                  forecast?.temperature
+                  === null
+                  || forecast?.temperature
+                  === undefined
+                ) {
+                  return null;
                 }
-              )
+
+                return (
+                  <Circle
+                    key={`forecast-${style.daysAhead}-${point.timestamp}`}
+                    cx={getX(
+                      point.timestamp
+                    )}
+                    cy={getY(
+                      forecast.temperature
+                    )}
+                    r={style.radius}
+                    fill={style.color}
+                    stroke="#ffffff"
+                    strokeWidth={1.1}
+                  />
+                );
+              })
             )}
 
 
-          {data.map(
-            (point, index) => {
-              if (
-                point.actual_temperature
-                === null
-              ) {
-                return null;
-              }
-
-              return (
-                <Circle
-                  key={`actual-${point.timestamp}`}
-                  cx={getX(index)}
-                  cy={getY(
-                    point.actual_temperature
-                  )}
-                  r={3.4}
-                  fill="#0f172a"
-                  stroke="#ffffff"
-                  strokeWidth={1}
-                />
-              );
+          {data.map((point) => {
+            if (
+              point.actual_temperature
+              === null
+            ) {
+              return null;
             }
-          )}
+
+            return (
+              <Circle
+                key={`actual-${point.timestamp}`}
+                cx={getX(
+                  point.timestamp
+                )}
+                cy={getY(
+                  point.actual_temperature
+                )}
+                r={3.2}
+                fill={ACTUAL_COLOR}
+                fillOpacity={0.82}
+                stroke="#ffffff"
+                strokeWidth={1}
+              />
+            );
+          })}
 
 
-          {data.map(
-            (point, index) => {
-              // Label every 12 hours:
-              // 4 × 3-hour intervals.
-              if (index % 4 !== 0) {
-                return null;
-              }
-
-              const label =
-                formatForecastTime(
-                  point.timestamp,
-                  timeZone
-                );
+          {/* One centered date label for each local calendar day. */}
+          {daySegments.map(
+            (segment) => {
+              const centerX =
+                (
+                  getX(
+                    segment.startTimestamp
+                  )
+                  +
+                  getX(
+                    segment.endTimestamp
+                  )
+                ) / 2;
 
               return (
                 <SvgText
-                  key={`x-label-${index}`}
-                  x={getX(index)}
+                  key={`date-${segment.startTimestamp}`}
+                  x={centerX}
                   y={
                     chartHeight - 22
                   }
                   textAnchor="middle"
                   fontSize={12}
-                  fill="#667085"
+                  fontWeight="600"
+                  fill="#475467"
                 >
-                  {label}
+                  {segment.label}
                 </SvgText>
               );
             }
@@ -680,19 +818,21 @@ const styles =
     actualLegendLine: {
       width: 24,
       height: 10,
-      borderTopWidth: 2.5,
-      borderTopColor: "#0f172a",
+      borderTopWidth: 1.5,
+      borderTopColor:
+        "rgba(124, 58, 237, 0.62)",
       alignItems: "center",
       marginTop: 7,
     },
 
     actualLegendDot: {
       position: "absolute",
-      top: -5,
-      width: 7,
-      height: 7,
+      top: -4.5,
+      width: 6.5,
+      height: 6.5,
       borderRadius: 4,
-      backgroundColor: "#0f172a",
+      backgroundColor:
+        "rgba(124, 58, 237, 0.82)",
       borderWidth: 1,
       borderColor: "#ffffff",
     },

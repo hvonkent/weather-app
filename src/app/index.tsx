@@ -1,167 +1,379 @@
 import {
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 
 import {
-  router,
+  Link,
 } from "expo-router";
 
 import {
-  cities,
-} from "../constants/cities";
-
-import {
-  formatCollectedTime,
-} from "../utils/dateTime";
-
-import {
   getWeather,
-  type WeatherResponse,
+  WeatherResponse,
 } from "../services/weatherApi";
 
 
-type WeatherByCity = Record<
-  string,
-  WeatherResponse | undefined
->;
+type CityConfig = {
+  slug: string;
+  name: string;
+  location: string;
+  timeZone: string;
+};
 
 
-type ErrorsByCity = Record<
-  string,
-  boolean
->;
+const CITIES: CityConfig[] = [
+  {
+    slug: "amsterdam",
+    name: "Amsterdam",
+    location: "Netherlands",
+    timeZone: "Europe/Amsterdam",
+  },
+  {
+    slug: "bremen",
+    name: "Bremen",
+    location: "Germany",
+    timeZone: "Europe/Berlin",
+  },
+  {
+    slug: "munich",
+    name: "Munich",
+    location: "Germany",
+    timeZone: "Europe/Berlin",
+  },
+  {
+    slug: "rochester_mn",
+    name: "Rochester",
+    location: "Minnesota, USA",
+    timeZone: "America/Chicago",
+  },
+  {
+    slug: "boston_ma",
+    name: "Boston",
+    location: "Massachusetts, USA",
+    timeZone: "America/New_York",
+  },
+];
 
 
-export default function HomeScreen() {
-  const [
-    weatherByCity,
-    setWeatherByCity,
-  ] =
-    useState<WeatherByCity>(
+function formatTemperature(
+  value: number | null | undefined
+) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "—";
+  }
+
+  return `${value.toFixed(1)}°C`;
+}
+
+
+function formatPercent(
+  value: number | null | undefined
+) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "—";
+  }
+
+  return `${Math.round(value)}%`;
+}
+
+
+function formatWind(
+  value: number | null | undefined
+) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "—";
+  }
+
+  return `${value.toFixed(2)} m/s`;
+}
+
+
+function formatLocalTime(
+  date: Date,
+  timeZone: string
+) {
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      timeZone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }
+  ).format(date);
+}
+
+
+function formatLocalDateTime(
+  timestampMs: number,
+  timeZone: string
+) {
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      timeZone,
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }
+  ).format(
+    new Date(timestampMs)
+  );
+}
+
+
+function titleCase(
+  value: string | null | undefined
+) {
+  if (!value) {
+    return "—";
+  }
+
+  return value.replace(
+    /\b\w/g,
+    (character) =>
+      character.toUpperCase()
+  );
+}
+
+
+function CityCard({
+  city,
+  weather,
+  now,
+  compact,
+}: {
+  city: CityConfig;
+  weather?: WeatherResponse;
+  now: Date;
+  compact: boolean;
+}) {
+  const collectedAt =
+    weather?.current_collected_at
+      ? formatLocalDateTime(
+          Date.parse(
+            weather.current_collected_at
+          ),
+          city.timeZone
+        )
+      : "—";
+
+  return (
+    <View
+      style={[
+        styles.card,
+        compact
+          ? styles.cardCompact
+          : styles.cardWide,
+      ]}
+    >
+      <View style={styles.cardHeader}>
+        <View>
+          <Text style={styles.cityName}>
+            {city.name}
+          </Text>
+
+          <Text style={styles.location}>
+            {city.location}
+          </Text>
+        </View>
+
+        <View style={styles.localTimeBlock}>
+          <Text style={styles.metaLabel}>
+            Local time
+          </Text>
+
+          <Text style={styles.localTime}>
+            {formatLocalTime(
+              now,
+              city.timeZone
+            )}
+          </Text>
+        </View>
+      </View>
+
+
+      <View style={styles.currentSection}>
+        <Text style={styles.sectionEyebrow}>
+          Current Weather
+        </Text>
+
+        {weather ? (
+          <>
+            <View style={styles.statsGrid}>
+              <View style={styles.statsRow}>
+                <View style={styles.stat}>
+                  <Text style={styles.statLabel}>
+                    Temperature
+                  </Text>
+                  <Text style={styles.statValue}>
+                    {formatTemperature(
+                      weather.current.temperature
+                    )}
+                  </Text>
+                </View>
+
+                <View style={styles.stat}>
+                  <Text style={styles.statLabel}>
+                    Conditions
+                  </Text>
+                  <Text style={styles.statValue}>
+                    {titleCase(
+                      weather.current.description
+                    )}
+                  </Text>
+                </View>
+
+                <View style={styles.stat}>
+                  <Text style={styles.statLabel}>
+                    Wind
+                  </Text>
+                  <Text style={styles.statValue}>
+                    {formatWind(
+                      weather.current.wind_speed
+                    )}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.statsRow}>
+                <View style={styles.stat}>
+                  <Text style={styles.statLabel}>
+                    Feels like
+                  </Text>
+                  <Text style={styles.statValue}>
+                    {formatTemperature(
+                      weather.current.feels_like
+                    )}
+                  </Text>
+                </View>
+
+                <View style={styles.stat}>
+                  <Text style={styles.statLabel}>
+                    Humidity
+                  </Text>
+                  <Text style={styles.statValue}>
+                    {formatPercent(
+                      weather.current.humidity
+                    )}
+                  </Text>
+                </View>
+
+                <View style={styles.statSpacer} />
+              </View>
+            </View>
+
+            <View style={styles.weatherMetadata}>
+              <View style={styles.metadataRow}>
+                <Text style={styles.metaLabel}>
+                  Data collected
+                </Text>
+                <Text style={styles.metaValue}>
+                  {collectedAt} local
+                </Text>
+              </View>
+            </View>
+          </>
+        ) : (
+          <View style={styles.loadingBlock}>
+            <ActivityIndicator />
+            <Text style={styles.loadingText}>
+              Loading current weather…
+            </Text>
+          </View>
+        )}
+      </View>
+
+
+      <View style={styles.validationContainer}>
+        <View style={styles.validationBox}>
+          <Link
+            href={{
+              pathname: "/city/[city]",
+              params: {
+                city: city.slug,
+              },
+            }}
+            asChild
+          >
+            <Pressable style={styles.validationPressable}>
+              <Text style={styles.validationTitle}>
+                Forecast Validation
+              </Text>
+            </Pressable>
+          </Link>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+
+export default function HomePage() {
+  const [weatherByCity, setWeatherByCity] =
+    useState<Record<string, WeatherResponse>>(
       {}
     );
 
-
-  const [
-    errorsByCity,
-    setErrorsByCity,
-  ] =
-    useState<ErrorsByCity>(
-      {}
+  const [now, setNow] =
+    useState(
+      () => new Date()
     );
 
+  const {
+    width,
+  } = useWindowDimensions();
 
-  const [
-    loading,
-    setLoading,
-  ] =
-    useState(true);
+  const compact =
+    width < 720;
 
 
   useEffect(() => {
-    let cancelled =
-      false;
+    let cancelled = false;
 
-
-    async function loadCities() {
-      setLoading(true);
-
-
-      const results =
-        await Promise.all(
-          cities.map(
-            async (
-              city
-            ) => {
-              try {
-                const weather =
-                  await getWeather(
-                    city.slug
-                  );
-
-                return {
-                  slug:
-                    city.slug,
-
-                  weather,
-                  error:
-                    false,
-                };
-              } catch {
-                return {
-                  slug:
-                    city.slug,
-
-                  weather:
-                    undefined,
-
-                  error:
-                    true,
-                };
-              }
-            }
-          )
-        );
-
-
-      if (cancelled) {
-        return;
-      }
-
-
-      const newWeather:
-        WeatherByCity =
-          {};
-
-      const newErrors:
-        ErrorsByCity =
-          {};
-
-
-      results.forEach(
-        (
-          result
-        ) => {
-          if (
-            result.weather
-          ) {
-            newWeather[
-              result.slug
-            ] =
-              result.weather;
+    CITIES.forEach((city) => {
+      getWeather(city.slug)
+        .then((weather) => {
+          if (cancelled) {
+            return;
           }
 
-          newErrors[
-            result.slug
-          ] =
-            result.error;
-        }
-      );
-
-
-      setWeatherByCity(
-        newWeather
-      );
-
-      setErrorsByCity(
-        newErrors
-      );
-
-      setLoading(false);
-    }
-
-
-    loadCities();
-
+          setWeatherByCity(
+            (previous) => ({
+              ...previous,
+              [city.slug]: weather,
+            })
+          );
+        })
+        .catch((error) => {
+          console.error(
+            `Unable to load weather for ${city.slug}`,
+            error
+          );
+        });
+    });
 
     return () => {
       cancelled = true;
@@ -169,431 +381,275 @@ export default function HomeScreen() {
   }, []);
 
 
+  useEffect(() => {
+    const interval = setInterval(
+      () => {
+        setNow(new Date());
+      },
+      30_000
+    );
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
+
+  const cards = useMemo(
+    () => (
+      CITIES.map((city) => (
+        <CityCard
+          key={city.slug}
+          city={city}
+          weather={
+            weatherByCity[
+              city.slug
+            ]
+          }
+          now={now}
+          compact={compact}
+        />
+      ))
+    ),
+    [
+      weatherByCity,
+      now,
+      compact,
+    ]
+  );
+
+
   return (
     <ScrollView
+      style={styles.screen}
       contentContainerStyle={
-        styles.page
+        styles.content
       }
     >
-      <View
-        style={
-          styles.content
-        }
-      >
-        <View
-          style={
-            styles.header
-          }
-        >
-          <Text
-            style={
-              styles.title
-            }
-          >
-            Weather
-          </Text>
+      <View style={styles.pageHeader}>
+        <Text style={styles.pageTitle}>
+          Weather Forecast Validation
+        </Text>
 
-          <Text
-            style={
-              styles.subtitle
-            }
-          >
-            Current conditions
-            and 5-day forecasts
-          </Text>
-        </View>
+        <Text style={styles.pageSubtitle}>
+          Current conditions and forecast validation
+        </Text>
+      </View>
 
-
-        <View
-          style={
-            styles.grid
-          }
-        >
-          {cities.map(
-            (
-              city
-            ) => {
-              const weather =
-                weatherByCity[
-                  city.slug
-                ];
-
-              const failed =
-                errorsByCity[
-                  city.slug
-                ];
-
-
-              return (
-                <Pressable
-                  key={
-                    city.slug
-                  }
-                  style={({ pressed }) => [
-                    styles.card,
-
-                    pressed &&
-                      styles.cardPressed,
-                  ]}
-                  onPress={() =>
-                    router.push(
-                      {
-                        pathname:
-                          "/city/[city]",
-
-                        params: {
-                          city:
-                            city.slug,
-                        },
-                      }
-                    )
-                  }
-                >
-                  <View
-                    style={
-                      styles.cardHeader
-                    }
-                  >
-                    <View>
-                      <Text
-                        style={
-                          styles.city
-                        }
-                      >
-                        {
-                          city.name
-                        }
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.location
-                        }
-                      >
-                        {
-                          city.location
-                        }
-                      </Text>
-                    </View>
-
-
-                    <Text
-                      style={
-                        styles.arrow
-                      }
-                    >
-                      →
-                    </Text>
-                  </View>
-
-
-                  {loading &&
-                  !weather ? (
-                    <Text
-                      style={
-                        styles.loading
-                      }
-                    >
-                      Loading...
-                    </Text>
-                  ) : failed ? (
-                    <Text
-                      style={
-                        styles.error
-                      }
-                    >
-                      Weather
-                      temporarily
-                      unavailable
-                    </Text>
-                  ) : weather ? (
-                    <>
-                      <View
-                        style={
-                          styles.weatherRow
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.temperature
-                          }
-                        >
-                          {weather.current.temperature.toFixed(
-                            1
-                          )}
-                          °C
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.description
-                          }
-                        >
-                          {
-                            weather
-                              .current
-                              .description
-                          }
-                        </Text>
-                      </View>
-
-
-                      <View
-                        style={
-                          styles.details
-                        }
-                      >
-                        <View
-                          style={
-                            styles.detail
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.detailLabel
-                            }
-                          >
-                            Feels
-                          </Text>
-
-                          <Text
-                            style={
-                              styles.detailValue
-                            }
-                          >
-                            {weather.current.feels_like.toFixed(
-                              1
-                            )}
-                            °
-                          </Text>
-                        </View>
-
-
-                        <View
-                          style={
-                            styles.detail
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.detailLabel
-                            }
-                          >
-                            Humidity
-                          </Text>
-
-                          <Text
-                            style={
-                              styles.detailValue
-                            }
-                          >
-                            {
-                              weather
-                                .current
-                                .humidity
-                            }
-                            %
-                          </Text>
-                        </View>
-
-
-                        <View
-                          style={
-                            styles.detail
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.detailLabel
-                            }
-                          >
-                            Wind
-                          </Text>
-
-                          <Text
-                            style={
-                              styles.detailValue
-                            }
-                          >
-                            {
-                              weather
-                                .current
-                                .wind_speed
-                            }{" "}
-                            m/s
-                          </Text>
-                        </View>
-                      </View>
-
-
-                      <Text
-                        style={
-                          styles.updated
-                        }
-                      >
-                        Updated{" "}
-                        {formatCollectedTime(
-                          weather.current_collected_at,
-                          city.timeZone
-                        )}{" "}
-                        local
-                      </Text>
-                    </>
-                  ) : null}
-                </Pressable>
-              );
-            }
-          )}
-        </View>
+      <View style={styles.cards}>
+        {cards}
       </View>
     </ScrollView>
   );
 }
 
 
-const styles =
-  StyleSheet.create({
-    page: {
-      flexGrow: 1,
-      backgroundColor:
-        "#f4f7fb",
-      padding: 24,
-    },
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#f7f9fc",
+  },
 
-    content: {
-      width: "100%",
-      maxWidth: 1100,
-      alignSelf: "center",
-    },
+  content: {
+    width: "100%",
+    maxWidth: 1220,
+    alignSelf: "center",
+    paddingHorizontal: 24,
+    paddingTop: 36,
+    paddingBottom: 48,
+  },
 
-    header: {
-      marginBottom: 28,
-    },
+  pageHeader: {
+    marginBottom: 24,
+  },
 
-    title: {
-      fontSize: 38,
-      fontWeight: "700",
-      color: "#101828",
-    },
+  pageTitle: {
+    color: "#101828",
+    fontSize: 36,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
 
-    subtitle: {
-      marginTop: 5,
-      fontSize: 17,
-      color: "#667085",
-    },
+  pageSubtitle: {
+    color: "#667085",
+    fontSize: 16,
+  },
 
-    grid: {
-      flexDirection:
-        "row",
-      flexWrap:
-        "wrap",
-      gap: 16,
-    },
+  cards: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+  },
 
-    card: {
-      flexGrow: 1,
-      flexBasis: 320,
-      minWidth: 280,
+  card: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e4e7ec",
+    borderRadius: 18,
+    overflow: "hidden",
+  },
 
-      backgroundColor:
-        "#ffffff",
+  cardWide: {
+    flexGrow: 1,
+    flexBasis: "31%",
+    minWidth: 340,
+  },
 
-      padding: 22,
+  cardCompact: {
+    width: "100%",
+  },
 
-      borderRadius: 18,
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 18,
+    paddingHorizontal: 22,
+    paddingTop: 20,
+    paddingBottom: 14,
+  },
 
-      borderWidth: 1,
+  cityName: {
+    color: "#101828",
+    fontSize: 22,
+    fontWeight: "700",
+  },
 
-      borderColor:
-        "#e4e7ec",
-    },
+  location: {
+    color: "#667085",
+    fontSize: 13,
+    marginTop: 3,
+  },
 
-    cardPressed: {
-      opacity: 0.75,
-    },
+  localTimeBlock: {
+    alignItems: "flex-end",
+  },
 
-    cardHeader: {
-      flexDirection:
-        "row",
+  localTime: {
+    color: "#101828",
+    fontSize: 14,
+    fontWeight: "700",
+    marginTop: 2,
+  },
 
-      alignItems:
-        "flex-start",
+  currentSection: {
+    paddingHorizontal: 22,
+    paddingBottom: 14,
+  },
 
-      justifyContent:
-        "space-between",
-    },
+  sectionEyebrow: {
+    color: "#667085",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
 
-    city: {
-      fontSize: 22,
-      fontWeight: "600",
-      color: "#101828",
-    },
+  statsGrid: {
+    gap: 9,
+    marginBottom: 10,
+  },
 
-    location: {
-      marginTop: 4,
-      fontSize: 14,
-      color: "#667085",
-    },
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
 
-    arrow: {
-      fontSize: 24,
-      color: "#2563eb",
-    },
+  stat: {
+    flex: 1,
+    minWidth: 0,
+  },
 
-    weatherRow: {
-      marginTop: 22,
-    },
+  statSpacer: {
+    flex: 1,
+    minWidth: 0,
+  },
 
-    temperature: {
-      fontSize: 34,
-      fontWeight: "700",
-      color: "#101828",
-    },
+  statLabel: {
+    color: "#98a2b3",
+    fontSize: 10,
+    lineHeight: 13,
+    minHeight: 13,
+    marginBottom: 2,
+  },
 
-    description: {
-      marginTop: 3,
-      fontSize: 16,
-      color: "#667085",
-      textTransform:
-        "capitalize",
-    },
+  statValue: {
+    color: "#101828",
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 17,
+    minHeight: 17,
+  },
 
-    details: {
-      marginTop: 20,
-      flexDirection:
-        "row",
-      gap: 20,
-    },
+  weatherMetadata: {
+    borderTopWidth: 1,
+    borderTopColor: "#f0f2f5",
+    paddingTop: 9,
+  },
 
-    detail: {
-      flexGrow: 1,
-    },
+  metadataRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "flex-start",
+    gap: 8,
+  },
 
-    detailLabel: {
-      fontSize: 12,
-      color: "#98a2b3",
-    },
+  metaLabel: {
+    color: "#98a2b3",
+    fontSize: 11,
+  },
 
-    detailValue: {
-      marginTop: 3,
-      fontSize: 15,
-      fontWeight: "600",
-      color: "#344054",
-    },
+  metaValue: {
+    color: "#667085",
+    fontSize: 11,
+    textAlign: "left",
+  },
 
-    updated: {
-      marginTop: 18,
-      fontSize: 12,
-      color: "#98a2b3",
-    },
+  loadingBlock: {
+    minHeight: 160,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
 
-    loading: {
-      marginTop: 24,
-      color: "#667085",
-    },
+  loadingText: {
+    color: "#667085",
+    fontSize: 13,
+  },
 
-    error: {
-      marginTop: 24,
-      color: "#b42318",
-    },
-  });
+  validationContainer: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 22,
+    paddingTop: 6,
+    paddingBottom: 18,
+  },
+
+  validationBox: {
+    minWidth: 190,
+    backgroundColor: "#f5f3ff",
+    borderWidth: 2,
+    borderColor: "#7c3aed",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+
+  validationPressable: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+
+  validationTitle: {
+    color: "#5b21b6",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+});
