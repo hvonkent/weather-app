@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -84,7 +85,8 @@ const FORECAST_STYLES: ForecastStyle[] = [
 
 
 const ACTUAL_COLOR = "#7c3aed";
-const HOUR_WIDTH = 11;
+const DESKTOP_HOUR_WIDTH = 11;
+const MOBILE_HOUR_WIDTH = 4;
 
 
 function getRouteCity(
@@ -164,6 +166,26 @@ function formatDayLabel(
 }
 
 
+function formatTimeLabel(
+  timestamp: number,
+  timeZone: string
+) {
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      timeZone,
+      hour: "numeric",
+      hour12: true,
+    }
+  )
+    .format(
+      new Date(timestamp * 1000)
+    )
+    .replace(" ", "")
+    .toLowerCase();
+}
+
+
 export default function TemperatureChart({
   timeZone,
 }: Props) {
@@ -174,6 +196,17 @@ export default function TemperatureChart({
   const citySlug = getRouteCity(
     params.city
   );
+
+  const { width: viewportWidth } =
+    useWindowDimensions();
+
+  const compact =
+    viewportWidth < 720;
+
+  const hourWidth =
+    compact
+      ? MOBILE_HOUR_WIDTH
+      : DESKTOP_HOUR_WIDTH;
 
   const [validation, setValidation] =
     useState<WeatherValidationResponse | null>(
@@ -311,14 +344,17 @@ export default function TemperatureChart({
   }
 
 
-  const paddingLeft = 58;
-  const paddingRight = 24;
-  const paddingTop = 24;
-  const paddingBottom = 76;
+  const paddingLeft =
+    compact ? 46 : 58;
+  const paddingRight =
+    compact ? 14 : 24;
+  const paddingTop =
+    compact ? 18 : 24;
+  const paddingBottom =
+    compact ? 58 : 76;
 
-  // The old plot was about 270 px tall.
-  // 540 px gives the requested 2x vertical magnification.
-  const plotHeight = 540;
+  const plotHeight =
+    compact ? 390 : 540;
   const chartHeight =
     paddingTop +
     plotHeight +
@@ -338,10 +374,9 @@ export default function TemperatureChart({
     1
   );
 
-  // A true time scale:
-  // every hour always occupies HOUR_WIDTH pixels.
+  // Keep the same time scale, but compress it on phones.
   const plotWidth =
-    totalHours * HOUR_WIDTH;
+    totalHours * hourWidth;
 
   const chartWidth =
     paddingLeft +
@@ -379,7 +414,7 @@ export default function TemperatureChart({
         firstTimestamp
       ) / 3600
     ) *
-      HOUR_WIDTH
+      hourWidth
   );
 
 
@@ -436,6 +471,13 @@ export default function TemperatureChart({
   ) {
     hourlyTicks.push(timestamp);
   }
+
+  // Validation points occur every 3 hours.
+  // Label every other point, so the x-axis shows a time every 6 hours.
+  const xAxisLabelPoints =
+    data.filter(
+      (_, index) => index % 2 === 0
+    );
 
 
   const dayStarts: number[] = [];
@@ -598,18 +640,37 @@ export default function TemperatureChart({
           )}
 
 
-          {/* One small x-axis tick per hour. */}
-          {hourlyTicks.map(
-            (timestamp) => (
+          {/* One tick at every 3-hour validation point. */}
+          {data.map(
+            (point) => (
               <Line
-                key={`hour-${timestamp}`}
-                x1={getX(timestamp)}
+                key={`tick-${point.timestamp}`}
+                x1={getX(point.timestamp)}
                 y1={plotBottom}
-                x2={getX(timestamp)}
-                y2={plotBottom + 5}
+                x2={getX(point.timestamp)}
+                y2={plotBottom + 4}
                 stroke="#cbd5e1"
                 strokeWidth={0.8}
               />
+            )
+          )}
+
+          {/* Label every other tick, so times appear every 6 hours. */}
+          {xAxisLabelPoints.map(
+            (point) => (
+              <SvgText
+                key={`time-${point.timestamp}`}
+                x={getX(point.timestamp)}
+                y={plotBottom + 18}
+                textAnchor="middle"
+                fontSize={compact ? 9 : 10}
+                fill="#98a2b3"
+              >
+                {formatTimeLabel(
+                  point.timestamp,
+                  timeZone
+                )}
+              </SvgText>
             )
           )}
 
@@ -648,7 +709,7 @@ export default function TemperatureChart({
                   }
                   y={y + 4}
                   textAnchor="end"
-                  fontSize={12}
+                  fontSize={compact ? 11 : 12}
                   fill="#667085"
                 >
                   {Math.round(
@@ -757,10 +818,10 @@ export default function TemperatureChart({
                   key={`date-${segment.startTimestamp}`}
                   x={centerX}
                   y={
-                    chartHeight - 22
+                    chartHeight - 12
                   }
                   textAnchor="middle"
-                  fontSize={12}
+                  fontSize={compact ? 10 : 12}
                   fontWeight="600"
                   fill="#475467"
                 >

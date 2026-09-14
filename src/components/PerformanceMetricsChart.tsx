@@ -1,30 +1,31 @@
 import {
-    useEffect,
-    useMemo,
-    useState,
+  useEffect,
+  useMemo,
+  useState,
 } from "react";
 
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from "react-native";
 
 import {
-    useLocalSearchParams,
+  useLocalSearchParams,
 } from "expo-router";
 
 import Svg, {
-    Line,
-    Rect,
-    Text as SvgText,
+  Line,
+  Rect,
+  Text as SvgText,
 } from "react-native-svg";
 
 import {
-    getWeatherValidation,
-    TemperatureValidationPoint,
-    WeatherValidationResponse,
+  getWeatherValidation,
+  TemperatureValidationPoint,
+  WeatherValidationResponse,
 } from "../services/weatherApi";
 
 
@@ -54,9 +55,12 @@ const HORIZONS: ForecastHorizon[] = [
 ];
 
 
-const HOUR_WIDTH = 11;
-const CELL_HEIGHT = 38;
-const CELL_GAP = 3;
+const DESKTOP_HOUR_WIDTH = 11;
+const MOBILE_HOUR_WIDTH = 4;
+const DESKTOP_CELL_HEIGHT = 38;
+const MOBILE_CELL_HEIGHT = 32;
+const DESKTOP_CELL_GAP = 3;
+const MOBILE_CELL_GAP = 2;
 
 
 const HEAT_BINS = [
@@ -174,6 +178,26 @@ function formatDayLabel(
 }
 
 
+function formatTimeLabel(
+  timestamp: number,
+  timeZone: string
+) {
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      timeZone,
+      hour: "numeric",
+      hour12: true,
+    }
+  )
+    .format(
+      new Date(timestamp * 1000)
+    )
+    .replace(" ", "")
+    .toLowerCase();
+}
+
+
 function buildErrorPoints(
   data: TemperatureValidationPoint[]
 ): ErrorPoint[] {
@@ -217,6 +241,27 @@ export default function PerformanceMetricsChart({
   const citySlug = getRouteCity(
     params.city
   );
+
+  const { width: viewportWidth } =
+    useWindowDimensions();
+
+  const compact =
+    viewportWidth < 720;
+
+  const hourWidth =
+    compact
+      ? MOBILE_HOUR_WIDTH
+      : DESKTOP_HOUR_WIDTH;
+
+  const cellHeight =
+    compact
+      ? MOBILE_CELL_HEIGHT
+      : DESKTOP_CELL_HEIGHT;
+
+  const cellGap =
+    compact
+      ? MOBILE_CELL_GAP
+      : DESKTOP_CELL_GAP;
 
   const [validation, setValidation] =
     useState<WeatherValidationResponse | null>(
@@ -358,15 +403,19 @@ export default function PerformanceMetricsChart({
   }
 
 
-  const paddingLeft = 76;
-  const paddingRight = 24;
-  const paddingTop = 18;
-  const paddingBottom = 68;
+  const paddingLeft =
+    compact ? 62 : 76;
+  const paddingRight =
+    compact ? 14 : 24;
+  const paddingTop =
+    compact ? 14 : 18;
+  const paddingBottom =
+    compact ? 54 : 68;
 
   const heatmapHeight =
     HORIZONS.length *
-    (CELL_HEIGHT + CELL_GAP) -
-    CELL_GAP;
+    (cellHeight + cellGap) -
+    cellGap;
 
   const chartHeight =
     paddingTop +
@@ -402,7 +451,7 @@ export default function PerformanceMetricsChart({
   );
 
   const plotWidth =
-    totalHours * HOUR_WIDTH;
+    totalHours * hourWidth;
 
   const chartWidth =
     paddingLeft +
@@ -414,7 +463,7 @@ export default function PerformanceMetricsChart({
     heatmapHeight;
 
   const cellWidth =
-    HOUR_WIDTH * 3;
+    hourWidth * 3;
 
 
   const getX = (
@@ -426,7 +475,7 @@ export default function PerformanceMetricsChart({
         timestamp -
         firstTimestamp
       ) / 3600
-    ) * HOUR_WIDTH
+    ) * hourWidth
   );
 
 
@@ -435,7 +484,7 @@ export default function PerformanceMetricsChart({
   ) => (
     paddingTop +
     rowIndex *
-      (CELL_HEIGHT + CELL_GAP)
+      (cellHeight + cellGap)
   );
 
 
@@ -458,6 +507,13 @@ export default function PerformanceMetricsChart({
   ) {
     hourlyTicks.push(timestamp);
   }
+
+  // Validation points occur every 3 hours.
+  // Label every other point, so the x-axis shows a time every 6 hours.
+  const xAxisLabelPoints =
+    errorPoints.filter(
+      (_, index) => index % 2 === 0
+    );
 
 
   const dayStarts: number[] = [];
@@ -592,7 +648,7 @@ export default function PerformanceMetricsChart({
                 x={paddingLeft - 12}
                 y={
                   getRowY(rowIndex) +
-                  CELL_HEIGHT / 2 +
+                  cellHeight / 2 +
                   4
                 }
                 textAnchor="end"
@@ -636,7 +692,7 @@ export default function PerformanceMetricsChart({
                       width={
                         cellWidth - 2
                       }
-                      height={CELL_HEIGHT}
+                      height={cellHeight}
                       rx={3}
                       fill={getHeatColor(
                         value
@@ -666,17 +722,37 @@ export default function PerformanceMetricsChart({
           )}
 
 
-          {hourlyTicks.map(
-            (timestamp) => (
+          {/* One tick at every 3-hour validation point. */}
+          {errorPoints.map(
+            (point) => (
               <Line
-                key={`hour-${timestamp}`}
-                x1={getX(timestamp)}
-                y1={plotBottom + 4}
-                x2={getX(timestamp)}
-                y2={plotBottom + 9}
+                key={`tick-${point.timestamp}`}
+                x1={getX(point.timestamp)}
+                y1={plotBottom + 3}
+                x2={getX(point.timestamp)}
+                y2={plotBottom + 7}
                 stroke="#cbd5e1"
                 strokeWidth={0.8}
               />
+            )
+          )}
+
+          {/* Label every other tick, so times appear every 6 hours. */}
+          {xAxisLabelPoints.map(
+            (point) => (
+              <SvgText
+                key={`time-${point.timestamp}`}
+                x={getX(point.timestamp)}
+                y={plotBottom + 19}
+                textAnchor="middle"
+                fontSize={compact ? 9 : 10}
+                fill="#98a2b3"
+              >
+                {formatTimeLabel(
+                  point.timestamp,
+                  timeZone
+                )}
+              </SvgText>
             )
           )}
 
@@ -697,7 +773,7 @@ export default function PerformanceMetricsChart({
                 <SvgText
                   key={`date-${segment.startTimestamp}`}
                   x={centerX}
-                  y={chartHeight - 22}
+                  y={chartHeight - 10}
                   textAnchor="middle"
                   fontSize={12}
                   fontWeight="600"
@@ -720,8 +796,21 @@ export default function PerformanceMetricsChart({
           Date range: {maeStartDate} – {maeEndDate}
         </Text>
 
-        <View style={styles.table}>
-          <View style={styles.tableRow}>
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator
+          contentContainerStyle={styles.tableScrollContent}
+        >
+          <View
+            style={[
+              styles.table,
+              compact
+                ? styles.tableCompact
+                : styles.tableWide,
+            ]}
+          >
+            <View style={styles.tableRow}>
             <View
               style={[
                 styles.tableCell,
@@ -778,8 +867,9 @@ export default function PerformanceMetricsChart({
                 );
               }
             )}
+            </View>
           </View>
-        </View>
+        </ScrollView>
       </View>
     </View>
   );
@@ -861,11 +951,23 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
+  tableScrollContent: {
+    paddingBottom: 4,
+  },
+
   table: {
     borderWidth: 1,
     borderColor: "#e4e7ec",
     borderRadius: 10,
     overflow: "hidden",
+  },
+
+  tableCompact: {
+    width: 570,
+  },
+
+  tableWide: {
+    width: "100%",
   },
 
   tableRow: {
