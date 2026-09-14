@@ -178,7 +178,37 @@ function formatDayLabel(
 }
 
 
+function buildErrorPoints(
+  data: TemperatureValidationPoint[]
+): ErrorPoint[] {
+  return data.map((point) => {
+    const errors: ErrorPoint["errors"] = {};
 
+    if (
+      point.actual_temperature !== null
+    ) {
+      point.forecasts.forEach(
+        (forecast) => {
+          if (
+            forecast.temperature !== null
+          ) {
+            errors[
+              forecast.days_ahead
+            ] = Math.abs(
+              forecast.temperature -
+              point.actual_temperature!
+            );
+          }
+        }
+      );
+    }
+
+    return {
+      timestamp: point.timestamp,
+      errors,
+    };
+  });
+}
 
 export default function PerformanceMetricsChart({
   timeZone,
