@@ -55,8 +55,8 @@ const HORIZONS: ForecastHorizon[] = [
 ];
 
 
-const DESKTOP_HOUR_WIDTH = 11;
-const MOBILE_HOUR_WIDTH = 4;
+const DESKTOP_HOUR_WIDTH = 10;
+const MOBILE_HOUR_WIDTH = 5;
 const DESKTOP_CELL_HEIGHT = 38;
 const MOBILE_CELL_HEIGHT = 32;
 const DESKTOP_CELL_GAP = 3;
@@ -178,57 +178,6 @@ function formatDayLabel(
 }
 
 
-function formatTimeLabel(
-  timestamp: number,
-  timeZone: string
-) {
-  return new Intl.DateTimeFormat(
-    "en-US",
-    {
-      timeZone,
-      hour: "numeric",
-      hour12: true,
-    }
-  )
-    .format(
-      new Date(timestamp * 1000)
-    )
-    .replace(" ", "")
-    .toLowerCase();
-}
-
-
-function buildErrorPoints(
-  data: TemperatureValidationPoint[]
-): ErrorPoint[] {
-  return data.map((point) => {
-    const errors: ErrorPoint["errors"] = {};
-
-    if (
-      point.actual_temperature !== null
-    ) {
-      point.forecasts.forEach(
-        (forecast) => {
-          if (
-            forecast.temperature !== null
-          ) {
-            errors[
-              forecast.days_ahead
-            ] = Math.abs(
-              forecast.temperature -
-              point.actual_temperature!
-            );
-          }
-        }
-      );
-    }
-
-    return {
-      timestamp: point.timestamp,
-      errors,
-    };
-  });
-}
 
 
 export default function PerformanceMetricsChart({
@@ -410,7 +359,7 @@ export default function PerformanceMetricsChart({
   const paddingTop =
     compact ? 14 : 18;
   const paddingBottom =
-    compact ? 54 : 68;
+    compact ? 34 : 44;
 
   const heatmapHeight =
     HORIZONS.length *
@@ -507,13 +456,6 @@ export default function PerformanceMetricsChart({
   ) {
     hourlyTicks.push(timestamp);
   }
-
-  // Validation points occur every 3 hours.
-  // Label every other point, so the x-axis shows a time every 6 hours.
-  const xAxisLabelPoints =
-    errorPoints.filter(
-      (_, index) => index % 2 === 0
-    );
 
 
   const dayStarts: number[] = [];
@@ -737,27 +679,8 @@ export default function PerformanceMetricsChart({
             )
           )}
 
-          {/* Label every other tick, so times appear every 6 hours. */}
-          {xAxisLabelPoints.map(
-            (point) => (
-              <SvgText
-                key={`time-${point.timestamp}`}
-                x={getX(point.timestamp)}
-                y={plotBottom + 19}
-                textAnchor="middle"
-                fontSize={compact ? 9 : 10}
-                fill="#98a2b3"
-              >
-                {formatTimeLabel(
-                  point.timestamp,
-                  timeZone
-                )}
-              </SvgText>
-            )
-          )}
 
-
-          {daySegments.map(
+          {daySegments.slice(1).map(
             (segment) => {
               const centerX =
                 (

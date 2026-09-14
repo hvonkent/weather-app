@@ -85,8 +85,8 @@ const FORECAST_STYLES: ForecastStyle[] = [
 
 
 const ACTUAL_COLOR = "#7c3aed";
-const DESKTOP_HOUR_WIDTH = 11;
-const MOBILE_HOUR_WIDTH = 4;
+const DESKTOP_HOUR_WIDTH = 10;
+const MOBILE_HOUR_WIDTH = 5;
 
 
 function getRouteCity(
@@ -166,24 +166,6 @@ function formatDayLabel(
 }
 
 
-function formatTimeLabel(
-  timestamp: number,
-  timeZone: string
-) {
-  return new Intl.DateTimeFormat(
-    "en-US",
-    {
-      timeZone,
-      hour: "numeric",
-      hour12: true,
-    }
-  )
-    .format(
-      new Date(timestamp * 1000)
-    )
-    .replace(" ", "")
-    .toLowerCase();
-}
 
 
 export default function TemperatureChart({
@@ -351,7 +333,7 @@ export default function TemperatureChart({
   const paddingTop =
     compact ? 18 : 24;
   const paddingBottom =
-    compact ? 58 : 76;
+    compact ? 34 : 44;
 
   const plotHeight =
     compact ? 390 : 540;
@@ -471,13 +453,6 @@ export default function TemperatureChart({
   ) {
     hourlyTicks.push(timestamp);
   }
-
-  // Validation points occur every 3 hours.
-  // Label every other point, so the x-axis shows a time every 6 hours.
-  const xAxisLabelPoints =
-    data.filter(
-      (_, index) => index % 2 === 0
-    );
 
 
   const dayStarts: number[] = [];
@@ -655,25 +630,6 @@ export default function TemperatureChart({
             )
           )}
 
-          {/* Label every other tick, so times appear every 6 hours. */}
-          {xAxisLabelPoints.map(
-            (point) => (
-              <SvgText
-                key={`time-${point.timestamp}`}
-                x={getX(point.timestamp)}
-                y={plotBottom + 18}
-                textAnchor="middle"
-                fontSize={compact ? 9 : 10}
-                fill="#98a2b3"
-              >
-                {formatTimeLabel(
-                  point.timestamp,
-                  timeZone
-                )}
-              </SvgText>
-            )
-          )}
-
 
           {/* Local midnight separators. */}
           {dayStarts.map(
@@ -799,8 +755,8 @@ export default function TemperatureChart({
           })}
 
 
-          {/* One centered date label for each local calendar day. */}
-          {daySegments.map(
+          {/* Centered date labels, skipping the first partial day. */}
+          {daySegments.slice(1).map(
             (segment) => {
               const centerX =
                 (
