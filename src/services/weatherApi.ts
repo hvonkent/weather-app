@@ -42,25 +42,72 @@ export type WeatherResponse = {
   };
 };
 
+export type ValidationForecastPoint = {
+  days_ahead: 1 | 2 | 3 | 4 | 5;
+  temperature: number | null;
+  collected_at: string | null;
+  lead_hours: number | null;
+};
+
+export type TemperatureValidationPoint = {
+  timestamp: number;
+  actual_temperature: number | null;
+  actual_observed_at: number | null;
+  actual_collected_at: string | null;
+  forecasts: ValidationForecastPoint[];
+};
+
+export type WeatherValidationResponse = {
+  city_slug: string;
+  city: string;
+  country: string;
+  timezone_offset: number;
+  days: number;
+  interval_hours: number;
+  points_expected: number;
+  points: TemperatureValidationPoint[];
+};
+
 const API_URL =
   process.env.EXPO_PUBLIC_WEATHER_API_URL;
 
-export async function getWeather(
-  citySlug: string
-): Promise<WeatherResponse> {
+function getApiUrl() {
   if (!API_URL) {
     throw new Error(
       "EXPO_PUBLIC_WEATHER_API_URL is not configured."
     );
   }
 
+  return API_URL;
+}
+
+export async function getWeather(
+  citySlug: string
+): Promise<WeatherResponse> {
   const response = await fetch(
-    `${API_URL}/weather/${citySlug}`
+    `${getApiUrl()}/weather/${citySlug}`
   );
 
   if (!response.ok) {
     throw new Error(
       `Weather API returned HTTP ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+export async function getWeatherValidation(
+  citySlug: string,
+  days = 7
+): Promise<WeatherValidationResponse> {
+  const response = await fetch(
+    `${getApiUrl()}/weather/${citySlug}/validation?days=${days}`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Weather validation API returned HTTP ${response.status}`
     );
   }
 
