@@ -315,7 +315,7 @@ const BRIER_BINS = buildBins(
 
 
 function formatDegrees(value: number) {
-  return `${Math.round(value)}°`;
+  return `${Math.round(value)}°C`;
 }
 
 function formatPercent(value: number) {
@@ -640,7 +640,7 @@ export function getValidationMetric(
       getActualValue,
       getForecastValue,
       formatAxisValue: (value) =>
-        `${Math.round(value)}°`,
+        `${Math.round(value)}°F`,
       formatSummaryValue: (value) =>
         `${value.toFixed(2)}°F`,
     };

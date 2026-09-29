@@ -56,6 +56,13 @@ const HORIZONS: ForecastHorizon[] = [
 ];
 
 const HOUR_WIDTH = 4;
+const VALIDATION_INTERVAL_HOURS = 3;
+const POINTS_PER_DAY = 8;
+const REFERENCE_HISTORY_DAYS = 14;
+const FIXED_PLOT_WIDTH =
+  (REFERENCE_HISTORY_DAYS * POINTS_PER_DAY - 1)
+  * VALIDATION_INTERVAL_HOURS
+  * HOUR_WIDTH;
 const DESKTOP_CELL_HEIGHT = 38;
 const MOBILE_CELL_HEIGHT = 32;
 const DESKTOP_CELL_GAP = 3;
@@ -371,16 +378,13 @@ export default function ValidationPerformanceMetrics({
       unitSystem
     );
 
-  const totalHours = Math.max(
-    (
-      lastTimestamp -
-      firstTimestamp
-    ) / 3600,
+  const timestampSpan = Math.max(
+    lastTimestamp - firstTimestamp,
     1
   );
 
-  const plotWidth =
-    totalHours * HOUR_WIDTH;
+  // Keep 3, 7, and 14 day views the same physical width.
+  const plotWidth = FIXED_PLOT_WIDTH;
 
   const chartWidth =
     paddingLeft +
@@ -391,8 +395,16 @@ export default function ValidationPerformanceMetrics({
     paddingTop +
     heatmapHeight;
 
-  const cellWidth =
-    HOUR_WIDTH * 3;
+  const pointSpacing =
+    plotWidth / Math.max(
+      errorPoints.length - 1,
+      1
+    );
+
+  const cellWidth = Math.max(
+    pointSpacing,
+    1
+  );
 
 
   const getX = (
@@ -401,10 +413,9 @@ export default function ValidationPerformanceMetrics({
     paddingLeft +
     (
       (
-        timestamp -
-        firstTimestamp
-      ) / 3600
-    ) * HOUR_WIDTH
+        timestamp - firstTimestamp
+      ) / timestampSpan
+    ) * plotWidth
   );
 
   const getRowY = (
@@ -687,8 +698,9 @@ export default function ValidationPerformanceMetrics({
             )
           )}
 
-          {daySegments.map(
-            (segment) => {
+          {daySegments
+            .slice(1)
+            .map((segment) => {
               const centerX =
                 (
                   getX(

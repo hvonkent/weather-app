@@ -83,6 +83,13 @@ const FORECAST_STYLES: ForecastStyle[] = [
 
 const ACTUAL_COLOR = "#f97316";
 const HOUR_WIDTH = 4;
+const VALIDATION_INTERVAL_HOURS = 3;
+const POINTS_PER_DAY = 8;
+const REFERENCE_HISTORY_DAYS = 14;
+const FIXED_PLOT_WIDTH =
+  (REFERENCE_HISTORY_DAYS * POINTS_PER_DAY - 1)
+  * VALIDATION_INTERVAL_HOURS
+  * HOUR_WIDTH;
 
 
 function getLocalDateKey(
@@ -307,16 +314,15 @@ export default function ValidationMetricChart({
   const lastTimestamp =
     data[data.length - 1].timestamp;
 
-  const totalHours = Math.max(
-    (
-      lastTimestamp -
-      firstTimestamp
-    ) / 3600,
+  const timestampSpan = Math.max(
+    lastTimestamp - firstTimestamp,
     1
   );
 
-  const plotWidth =
-    totalHours * HOUR_WIDTH;
+  // Keep 3, 7, and 14 day views the same physical width.
+  // Shorter ranges spread their points farther apart instead of
+  // producing a narrower chart.
+  const plotWidth = FIXED_PLOT_WIDTH;
 
   const chartWidth =
     paddingLeft +
@@ -368,10 +374,9 @@ export default function ValidationMetricChart({
     paddingLeft +
     (
       (
-        timestamp -
-        firstTimestamp
-      ) / 3600
-    ) * HOUR_WIDTH
+        timestamp - firstTimestamp
+      ) / timestampSpan
+    ) * plotWidth
   );
 
   const getY = (
@@ -723,8 +728,9 @@ export default function ValidationMetricChart({
             );
           })}
 
-          {daySegments.map(
-            (segment) => {
+          {daySegments
+            .slice(1)
+            .map((segment) => {
               const centerX =
                 (
                   getX(

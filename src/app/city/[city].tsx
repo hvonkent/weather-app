@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   },
 
   backButtonText: {
-    color: "#2563eb",
+    color: "#f97316",
     fontSize: 14,
     fontWeight: "600",
   },
@@ -447,8 +447,8 @@ const styles = StyleSheet.create({
   },
 
   settingButtonSelected: {
-    borderColor: "#7c3aed",
-    backgroundColor: "#7c3aed",
+    borderColor: "#f97316",
+    backgroundColor: "#f97316",
   },
 
   settingButtonText: {
