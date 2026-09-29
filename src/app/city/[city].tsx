@@ -1,4 +1,9 @@
 import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,8 +16,19 @@ import {
   useLocalSearchParams,
 } from "expo-router";
 
-import TemperatureChart from "../../components/TemperatureChart";
-import PerformanceMetricsChart from "../../components/PerformanceMetricsChart";
+import ValidationMetricChart from "../../components/ValidationMetricChart";
+import ValidationPerformanceMetrics from "../../components/ValidationPerformanceMetrics";
+
+import {
+  UnitSystem,
+  VALIDATION_METRICS,
+  ValidationMetricKey,
+} from "../../components/validationMetrics";
+
+import {
+  getWeatherValidation,
+  WeatherValidationResponse,
+} from "../../services/weatherApi";
 
 
 const CITY_TIME_ZONES: Record<string, string> = {
@@ -22,6 +38,31 @@ const CITY_TIME_ZONES: Record<string, string> = {
   rochester_mn: "America/Chicago",
   boston_ma: "America/New_York",
 };
+
+
+type ValidationDays = 3 | 7 | 14;
+
+
+const VALIDATION_DAY_OPTIONS: ValidationDays[] = [
+  3,
+  7,
+  14,
+];
+
+
+const UNIT_SYSTEM_OPTIONS: {
+  value: UnitSystem;
+  label: string;
+}[] = [
+  {
+    value: "metric",
+    label: "Metric",
+  },
+  {
+    value: "imperial",
+    label: "Imperial",
+  },
+];
 
 
 function getRouteCity(
@@ -35,6 +76,16 @@ function getRouteCity(
 }
 
 
+function getSectionTitle(
+  title: string
+) {
+  return title.replace(
+    " Forecast Validation",
+    ""
+  );
+}
+
+
 export default function CityPage() {
   const params = useLocalSearchParams<{
     city?: string | string[];
@@ -45,6 +96,90 @@ export default function CityPage() {
 
   const timeZone =
     CITY_TIME_ZONES[citySlug] ?? "UTC";
+
+  const [days, setDays] =
+    useState<ValidationDays>(3);
+
+  const [unitSystem, setUnitSystem] =
+    useState<UnitSystem>("metric");
+
+  const [expandedMetrics, setExpandedMetrics] =
+    useState<ValidationMetricKey[]>([
+      "temperature",
+    ]);
+
+  const [validation, setValidation] =
+    useState<WeatherValidationResponse | null>(
+      null
+    );
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!citySlug) {
+      setValidation(null);
+      setLoading(false);
+      setError(
+        "Unable to determine the city for forecast validation."
+      );
+      return;
+    }
+
+    setValidation(null);
+    setLoading(true);
+    setError(null);
+
+    getWeatherValidation(
+      citySlug,
+      days
+    )
+      .then((result) => {
+        if (!cancelled) {
+          setValidation(result);
+        }
+      })
+      .catch((caughtError) => {
+        if (!cancelled) {
+          setError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Unable to load forecast validation data."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [citySlug, days]);
+
+
+  const toggleMetric = (
+    metricKey: ValidationMetricKey
+  ) => {
+    setExpandedMetrics((current) => (
+      current.includes(metricKey)
+        ? current.filter(
+            (key) => key !== metricKey
+          )
+        : [
+            ...current,
+            metricKey,
+          ]
+    ));
+  };
 
 
   return (
@@ -60,24 +195,171 @@ export default function CityPage() {
         </Pressable>
       </Link>
 
-      <View style={styles.section}>
-        <Text style={styles.heading}>
-          Temperature Forecast Validation
+      <View style={styles.pageHeader}>
+        <Text style={styles.pageHeading}>
+          Forecast Validation
         </Text>
 
-        <TemperatureChart
-          timeZone={timeZone}
-        />
+        <Text style={styles.pageSubtitle}>
+          Compare observed conditions with forecasts made 1–5 days earlier.
+        </Text>
+
+        <View style={styles.settingsRow}>
+          <View style={styles.settingGroup}>
+            <Text style={styles.settingLabel}>
+              History
+            </Text>
+
+            <View style={styles.settingButtons}>
+              {VALIDATION_DAY_OPTIONS.map(
+                (option) => {
+                  const selected =
+                    days === option;
+
+                  return (
+                    <Pressable
+                      key={option}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        selected,
+                      }}
+                      onPress={() =>
+                        setDays(option)
+                      }
+                      style={[
+                        styles.settingButton,
+                        selected
+                          && styles.settingButtonSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.settingButtonText,
+                          selected
+                            && styles.settingButtonTextSelected,
+                        ]}
+                      >
+                        {option} days
+                      </Text>
+                    </Pressable>
+                  );
+                }
+              )}
+            </View>
+          </View>
+
+          <View style={styles.settingGroup}>
+            <Text style={styles.settingLabel}>
+              Display
+            </Text>
+
+            <View style={styles.settingButtons}>
+              {UNIT_SYSTEM_OPTIONS.map(
+                (option) => {
+                  const selected =
+                    unitSystem === option.value;
+
+                  return (
+                    <Pressable
+                      key={option.value}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        selected,
+                      }}
+                      onPress={() =>
+                        setUnitSystem(option.value)
+                      }
+                      style={[
+                        styles.settingButton,
+                        selected
+                          && styles.settingButtonSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.settingButtonText,
+                          selected
+                            && styles.settingButtonTextSelected,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                }
+              )}
+            </View>
+          </View>
+        </View>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.heading}>
-          Performance Metrics
-        </Text>
+      <View style={styles.metricsList}>
+        {VALIDATION_METRICS.map(
+          (metric) => {
+            const expanded =
+              expandedMetrics.includes(
+                metric.key
+              );
 
-        <PerformanceMetricsChart
-          timeZone={timeZone}
-        />
+            return (
+              <View
+                key={metric.key}
+                style={styles.metricSection}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    expanded,
+                  }}
+                  onPress={() =>
+                    toggleMetric(metric.key)
+                  }
+                  style={styles.metricHeader}
+                >
+                  <Text style={styles.metricHeading}>
+                    {getSectionTitle(
+                      metric.title
+                    )}
+                  </Text>
+
+                  <Text style={styles.chevron}>
+                    {expanded ? "−" : "+"}
+                  </Text>
+                </Pressable>
+
+                {expanded && (
+                  <View style={styles.metricContent}>
+                    <Text style={styles.chartHeading}>
+                      {metric.title}
+                    </Text>
+
+                    <ValidationMetricChart
+                      metric={metric.key}
+                      timeZone={timeZone}
+                      validation={validation}
+                      loading={loading}
+                      error={error}
+                      unitSystem={unitSystem}
+                    />
+
+                    <Text style={styles.performanceHeading}>
+                      Performance Metrics
+                    </Text>
+
+                    <ValidationPerformanceMetrics
+                      metric={metric.key}
+                      timeZone={timeZone}
+                      validation={validation}
+                      loading={loading}
+                      error={error}
+                      unitSystem={unitSystem}
+                    />
+                  </View>
+                )}
+              </View>
+            );
+          }
+        )}
       </View>
     </ScrollView>
   );
@@ -96,14 +378,14 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     paddingHorizontal: 24,
     paddingTop: 32,
-    paddingBottom: 56,
-    gap: 42,
+    paddingBottom: 72,
   },
 
   backButton: {
     alignSelf: "flex-start",
     paddingVertical: 6,
     paddingRight: 12,
+    marginBottom: 24,
   },
 
   backButtonText: {
@@ -112,14 +394,131 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  section: {
-    width: "100%",
+  pageHeader: {
+    marginBottom: 28,
   },
 
-  heading: {
+  pageHeading: {
     color: "#101828",
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: "700",
+    marginBottom: 6,
+  },
+
+  pageSubtitle: {
+    color: "#667085",
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 20,
+  },
+
+  settingsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "flex-end",
+    gap: 22,
+  },
+
+  settingGroup: {
+    gap: 8,
+  },
+
+  settingLabel: {
+    color: "#475467",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  settingButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  settingButton: {
+    minWidth: 72,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#d0d5dd",
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+  },
+
+  settingButtonSelected: {
+    borderColor: "#7c3aed",
+    backgroundColor: "#7c3aed",
+  },
+
+  settingButtonText: {
+    color: "#475467",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  settingButtonTextSelected: {
+    color: "#ffffff",
+  },
+
+  metricsList: {
+    width: "100%",
+    gap: 14,
+  },
+
+  metricSection: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#e4e7ec",
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#ffffff",
+  },
+
+  metricHeader: {
+    minHeight: 66,
+    paddingHorizontal: 22,
+    paddingVertical: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+
+  metricHeading: {
+    flex: 1,
+    color: "#101828",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+
+  chevron: {
+    color: "#667085",
+    fontSize: 24,
+    fontWeight: "400",
+    lineHeight: 26,
+  },
+
+  metricContent: {
+    borderTopWidth: 1,
+    borderTopColor: "#eaecf0",
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 28,
+  },
+
+  chartHeading: {
+    color: "#101828",
+    fontSize: 24,
+    fontWeight: "700",
+    marginBottom: 18,
+  },
+
+  performanceHeading: {
+    color: "#101828",
+    fontSize: 24,
+    fontWeight: "700",
+    marginTop: 42,
     marginBottom: 18,
   },
 });
