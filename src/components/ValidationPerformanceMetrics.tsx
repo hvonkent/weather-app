@@ -1,5 +1,7 @@
 import {
+  useEffect,
   useMemo,
+  useRef,
 } from "react";
 
 import {
@@ -56,13 +58,9 @@ const HORIZONS: ForecastHorizon[] = [
 ];
 
 const HOUR_WIDTH = 4;
-const VALIDATION_INTERVAL_HOURS = 3;
-const POINTS_PER_DAY = 8;
-const REFERENCE_HISTORY_DAYS = 14;
+const FIXED_HISTORY_DAYS = 14;
 const FIXED_PLOT_WIDTH =
-  (REFERENCE_HISTORY_DAYS * POINTS_PER_DAY - 1)
-  * VALIDATION_INTERVAL_HOURS
-  * HOUR_WIDTH;
+  FIXED_HISTORY_DAYS * 24 * HOUR_WIDTH;
 const DESKTOP_CELL_HEIGHT = 38;
 const MOBILE_CELL_HEIGHT = 32;
 const DESKTOP_CELL_GAP = 3;
@@ -151,15 +149,16 @@ function formatTimeLabel(
       .toLowerCase();
   }
 
-  return new Intl.DateTimeFormat(
+  const hour = new Intl.DateTimeFormat(
     "en-GB",
     {
       timeZone,
       hour: "2-digit",
-      minute: "2-digit",
       hour12: false,
     }
   ).format(date);
+
+  return `${hour}h`;
 }
 
 
@@ -238,6 +237,8 @@ export default function ValidationPerformanceMetrics({
       ? MOBILE_CELL_GAP
       : DESKTOP_CELL_GAP;
 
+  const scrollViewRef = useRef<ScrollView | null>(null);
+
   const data = useMemo(
     () => (
       [...(validation?.points ?? [])]
@@ -269,6 +270,28 @@ export default function ValidationPerformanceMetrics({
     ),
     [errorPoints]
   );
+
+  const latestTimestamp =
+    errorPoints[errorPoints.length - 1]?.timestamp ?? null;
+
+  useEffect(() => {
+    if (latestTimestamp === null) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollToEnd({
+        animated: false,
+      });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [
+    latestTimestamp,
+    metricKey,
+    unitSystem,
+    compact,
+  ]);
 
   const summaryByHorizon = useMemo(
     () => {
@@ -378,12 +401,13 @@ export default function ValidationPerformanceMetrics({
       unitSystem
     );
 
-  const timestampSpan = Math.max(
+  const timestampRange = Math.max(
     lastTimestamp - firstTimestamp,
     1
   );
 
-  // Keep 3, 7, and 14 day views the same physical width.
+  // Match the main validation graph: every history option uses
+  // the same visual width, with shorter ranges spread out.
   const plotWidth = FIXED_PLOT_WIDTH;
 
   const chartWidth =
@@ -395,15 +419,11 @@ export default function ValidationPerformanceMetrics({
     paddingTop +
     heatmapHeight;
 
-  const pointSpacing =
-    plotWidth / Math.max(
-      errorPoints.length - 1,
-      1
-    );
-
   const cellWidth = Math.max(
-    pointSpacing,
-    1
+    errorPoints.length > 1
+      ? plotWidth / (errorPoints.length - 1)
+      : HOUR_WIDTH * 3,
+    3
   );
 
 
@@ -412,9 +432,8 @@ export default function ValidationPerformanceMetrics({
   ) => (
     paddingLeft +
     (
-      (
-        timestamp - firstTimestamp
-      ) / timestampSpan
+      (timestamp - firstTimestamp) /
+      timestampRange
     ) * plotWidth
   );
 
@@ -577,8 +596,14 @@ export default function ValidationPerformanceMetrics({
       </View>
 
       <ScrollView
+        ref={scrollViewRef}
         horizontal
         showsHorizontalScrollIndicator
+        onContentSizeChange={() => {
+          scrollViewRef.current?.scrollToEnd({
+            animated: false,
+          });
+        }}
       >
         <Svg
           width={chartWidth}
@@ -698,9 +723,8 @@ export default function ValidationPerformanceMetrics({
             )
           )}
 
-          {daySegments
-            .slice(1)
-            .map((segment) => {
+          {daySegments.map(
+            (segment) => {
               const centerX =
                 (
                   getX(
@@ -835,12 +859,16 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     marginBottom: 4,
+    paddingLeft: 4,
+    paddingRight: 4,
   },
 
   explainer: {
     color: "#667085",
     fontSize: 13,
     marginBottom: 14,
+    paddingLeft: 4,
+    paddingRight: 4,
   },
 
   scaleLegend: {

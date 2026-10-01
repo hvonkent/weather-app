@@ -6,6 +6,7 @@ import {
 
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,8 +20,8 @@ import {
 } from "expo-router";
 
 import {
-  getWeather,
-  WeatherResponse,
+  CurrentCityWeather,
+  getCurrentWeather,
 } from "../services/weatherApi";
 
 
@@ -166,15 +167,15 @@ function CityCard({
   compact,
 }: {
   city: CityConfig;
-  weather?: WeatherResponse;
+  weather?: CurrentCityWeather;
   now: Date;
   compact: boolean;
 }) {
   const collectedAt =
-    weather?.current_collected_at
+    weather?.collected_at
       ? formatLocalDateTime(
           Date.parse(
-            weather.current_collected_at
+            weather.collected_at
           ),
           city.timeZone
         )
@@ -230,7 +231,7 @@ function CityCard({
                   </Text>
                   <Text style={styles.statValue}>
                     {formatTemperature(
-                      weather.current.temperature
+                      weather.temperature
                     )}
                   </Text>
                 </View>
@@ -241,7 +242,7 @@ function CityCard({
                   </Text>
                   <Text style={styles.statValue}>
                     {titleCase(
-                      weather.current.description
+                      weather.weather_description
                     )}
                   </Text>
                 </View>
@@ -252,7 +253,7 @@ function CityCard({
                   </Text>
                   <Text style={styles.statValue}>
                     {formatWind(
-                      weather.current.wind_speed
+                      weather.wind_speed
                     )}
                   </Text>
                 </View>
@@ -265,7 +266,7 @@ function CityCard({
                   </Text>
                   <Text style={styles.statValue}>
                     {formatTemperature(
-                      weather.current.feels_like
+                      weather.feels_like
                     )}
                   </Text>
                 </View>
@@ -276,7 +277,7 @@ function CityCard({
                   </Text>
                   <Text style={styles.statValue}>
                     {formatPercent(
-                      weather.current.humidity
+                      weather.humidity
                     )}
                   </Text>
                 </View>
@@ -333,7 +334,7 @@ function CityCard({
 
 export default function HomePage() {
   const [weatherByCity, setWeatherByCity] =
-    useState<Record<string, WeatherResponse>>(
+    useState<Record<string, CurrentCityWeather>>(
       {}
     );
 
@@ -353,27 +354,22 @@ export default function HomePage() {
   useEffect(() => {
     let cancelled = false;
 
-    CITIES.forEach((city) => {
-      getWeather(city.slug)
-        .then((weather) => {
-          if (cancelled) {
-            return;
-          }
+    getCurrentWeather()
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
 
-          setWeatherByCity(
-            (previous) => ({
-              ...previous,
-              [city.slug]: weather,
-            })
-          );
-        })
-        .catch((error) => {
-          console.error(
-            `Unable to load weather for ${city.slug}`,
-            error
-          );
-        });
-    });
+        setWeatherByCity(
+          result.cities
+        );
+      })
+      .catch((error) => {
+        console.error(
+          "Unable to load current weather",
+          error
+        );
+      });
 
     return () => {
       cancelled = true;
@@ -427,13 +423,34 @@ export default function HomePage() {
       }
     >
       <View style={styles.pageHeader}>
-        <Text style={styles.pageTitle}>
-          Weather Forecast Validation
-        </Text>
+        <Image
+          source={require(
+            "../../assets/images/wfv-mark.png"
+          )}
+          style={[
+            styles.brandMark,
+            compact && styles.brandMarkCompact,
+          ]}
+          resizeMode="contain"
+          accessibilityLabel="WFV logo"
+        />
 
-        <Text style={styles.pageSubtitle}>
-          Current conditions and forecast validation
-        </Text>
+        <View style={styles.pageHeaderText}>
+          <Text
+            style={[
+              styles.pageTitle,
+              compact && styles.pageTitleCompact,
+            ]}
+          >
+            Weather Forecast Validation
+          </Text>
+
+          <Text style={styles.pageSubtitle}>
+            Observed weather vs. forecasts made 1–5 days earlier
+          </Text>
+
+          <View style={styles.headerAccent} />
+        </View>
       </View>
 
       <View style={styles.cards}>
@@ -460,19 +477,53 @@ const styles = StyleSheet.create({
   },
 
   pageHeader: {
-    marginBottom: 24,
+    marginBottom: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+  },
+
+  brandMark: {
+    width: 92,
+    height: 68,
+    flexShrink: 0,
+  },
+
+  brandMarkCompact: {
+    width: 68,
+    height: 50,
+  },
+
+  pageHeaderText: {
+    flex: 1,
+    minWidth: 0,
   },
 
   pageTitle: {
     color: "#101828",
     fontSize: 36,
     fontWeight: "800",
-    marginBottom: 4,
+    letterSpacing: -0.6,
+    marginBottom: 6,
+  },
+
+  pageTitleCompact: {
+    fontSize: 30,
+    letterSpacing: -0.4,
   },
 
   pageSubtitle: {
     color: "#667085",
     fontSize: 16,
+    lineHeight: 23,
+  },
+
+  headerAccent: {
+    width: 56,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: "#f97316",
+    marginTop: 14,
   },
 
   cards: {
@@ -630,9 +681,9 @@ const styles = StyleSheet.create({
 
   validationBox: {
     minWidth: 190,
-    backgroundColor: "#f5f3ff",
+    backgroundColor: "#fff7ed",
     borderWidth: 2,
-    borderColor: "#7c3aed",
+    borderColor: "#f97316",
     borderRadius: 12,
     overflow: "hidden",
   },
@@ -646,7 +697,7 @@ const styles = StyleSheet.create({
   },
 
   validationTitle: {
-    color: "#5b21b6",
+    color: "#c2410c",
     fontSize: 14,
     fontWeight: "700",
     textAlign: "center",

@@ -1,13 +1,13 @@
 {
   "id": "/",
   "name": "Weather Forecast Validation",
-  "short_name": "Weather Validation",
-  "description": "Compare observed temperatures with forecasts made 1-5 days earlier.",
+  "short_name": "WFV",
+  "description": "Observed weather vs. forecasts made 1-5 days earlier.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f7f9fc",
-  "theme_color": "#7c3aed",
+  "theme_color": "#f97316",
   "icons": [
     {
       "src": "/pwa-192.png",

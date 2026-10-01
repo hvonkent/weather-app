@@ -18,13 +18,13 @@ $manifest = @'
 {
   "id": "/",
   "name": "Weather Forecast Validation",
-  "short_name": "Weather Validation",
-  "description": "Compare observed temperatures with forecasts made 1-5 days earlier.",
+  "short_name": "WFV",
+  "description": "Observed weather vs. forecasts made 1-5 days earlier.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f7f9fc",
-  "theme_color": "#7c3aed",
+  "theme_color": "#f97316",
   "icons": [
     {
       "src": "/pwa-192.png",
@@ -60,7 +60,7 @@ export default function Root({ children }: PropsWithChildren) {
           content="width=device-width, initial-scale=1, shrink-to-fit=no"
         />
 
-        <meta name="theme-color" content="#7c3aed" />
+        <meta name="theme-color" content="#f97316" />
         <meta
           name="application-name"
           content="Weather Forecast Validation"
@@ -75,10 +75,22 @@ export default function Root({ children }: PropsWithChildren) {
         />
         <meta
           name="apple-mobile-web-app-title"
-          content="Weather Validation"
+          content="WFV"
         />
 
         <link rel="manifest" href="/manifest.json" />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="32x32"
+          href="/favicon-32.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="16x16"
+          href="/favicon-16.png"
+        />
         <link
           rel="apple-touch-icon"
           href="/apple-touch-icon.png"
@@ -108,11 +120,15 @@ function Save-ResizedPng {
         [string]$OutputPath
     )
 
-    $bitmap = New-Object System.Drawing.Bitmap($Size, $Size)
+    $bitmap = [System.Drawing.Bitmap]::new(
+        $Size,
+        $Size,
+        [System.Drawing.Imaging.PixelFormat]::Format32bppArgb
+    )
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 
     try {
-        $graphics.Clear([System.Drawing.Color]::White)
+        $graphics.Clear([System.Drawing.Color]::Transparent)
         $graphics.InterpolationMode = `
             [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
         $graphics.SmoothingMode = `
@@ -153,6 +169,14 @@ try {
     Save-ResizedPng `
         -Size 180 `
         -OutputPath (Join-Path $publicDir "apple-touch-icon.png")
+
+    Save-ResizedPng `
+        -Size 32 `
+        -OutputPath (Join-Path $publicDir "favicon-32.png")
+
+    Save-ResizedPng `
+        -Size 16 `
+        -OutputPath (Join-Path $publicDir "favicon-16.png")
 }
 finally {
     $source.Dispose()
@@ -164,6 +188,8 @@ Write-Host "  public\manifest.json"
 Write-Host "  public\pwa-192.png"
 Write-Host "  public\pwa-512.png"
 Write-Host "  public\apple-touch-icon.png"
+Write-Host "  public\favicon-32.png"
+Write-Host "  public\favicon-16.png"
 Write-Host "  src\app\+html.tsx"
 Write-Host ""
 Write-Host "Next run:" -ForegroundColor Cyan

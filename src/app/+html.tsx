@@ -12,7 +12,7 @@ export default function Root({ children }: PropsWithChildren) {
           content="width=device-width, initial-scale=1, shrink-to-fit=no"
         />
 
-        <meta name="theme-color" content="#7c3aed" />
+        <meta name="theme-color" content="#f97316" />
         <meta
           name="application-name"
           content="Weather Forecast Validation"
@@ -27,10 +27,22 @@ export default function Root({ children }: PropsWithChildren) {
         />
         <meta
           name="apple-mobile-web-app-title"
-          content="Weather Validation"
+          content="WFV"
         />
 
         <link rel="manifest" href="/manifest.json" />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="32x32"
+          href="/favicon-32.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="16x16"
+          href="/favicon-16.png"
+        />
         <link
           rel="apple-touch-icon"
           href="/apple-touch-icon.png"

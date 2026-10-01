@@ -75,3 +75,6 @@ cloud-backup/
 __pycache__/
 *.pyc
 *.pyo
+
+# Local GCS backup
+data/

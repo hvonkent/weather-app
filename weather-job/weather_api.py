@@ -7,6 +7,8 @@ import requests
 from dotenv import load_dotenv
 from google.cloud import storage
 
+from collector_integration import process_city_collection
+
 
 # ============================================================
 # Configuration
@@ -49,6 +51,13 @@ CITIES = {
     },
 }
 
+CITY_NAMES = {
+    "bremen": "Bremen",
+    "munich": "Munich",
+    "amsterdam": "Amsterdam",
+    "rochester_mn": "Rochester",
+    "boston_ma": "Boston",
+}
 
 # ============================================================
 # Configuration helpers
@@ -72,11 +81,170 @@ def get_bucket_name():
     return WEATHER_BUCKET
 
 
-def create_timestamp():
-    return datetime.now(
-        timezone.utc
-    ).strftime("%Y%m%dT%H%M%SZ")
+def create_collection_time():
+    return datetime.now(timezone.utc)
 
+
+def format_collection_timestamp(
+    collected_at,
+):
+    return collected_at.strftime(
+        "%Y%m%dT%H%M%SZ"
+    )
+
+# ============================================================
+# Compact current-weather snapshot for homepage
+# ============================================================
+
+def datetime_to_iso(value):
+    return (
+        value.astimezone(timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def normalize_homepage_current(
+    city_slug,
+    data,
+    collected_at,
+):
+    main = data.get("main") or {}
+
+    weather_items = data.get("weather") or []
+    weather = weather_items[0] if weather_items else {}
+
+    wind = data.get("wind") or {}
+    sys_data = data.get("sys") or {}
+
+    return {
+        "city": CITY_NAMES.get(city_slug, data.get("name") or city_slug,),
+        "country": sys_data.get("country"),
+        "timezone_offset": data.get("timezone"),
+
+        "observed_at": data.get("dt"),
+        "collected_at": datetime_to_iso(collected_at),
+
+        "temperature": main.get("temp"),
+        "feels_like": main.get("feels_like"),
+        "humidity": main.get("humidity"),
+
+        "wind_speed": wind.get("speed"),
+
+        "weather_main": weather.get("main"),
+        "weather_description": weather.get("description"),
+        "weather_icon": weather.get("icon"),
+    }
+
+
+def update_current_snapshot(
+    current_results,
+    collected_at,
+):
+    """
+    Update processed/current.json.
+
+    This object contains only the latest current-weather
+    values needed by the homepage.
+
+    Existing city entries are preserved if one city's
+    current-weather request fails during a collection run.
+    """
+
+    bucket_name = get_bucket_name()
+
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+
+    blob = bucket.blob("processed/current.json")
+
+    # Start with the previous snapshot if one already exists.
+    # That way a temporary failure for one city does not make
+    # that city disappear from the homepage.
+    document = {
+        "schema_version": 1,
+        "updated_at": None,
+        "units": {
+            "temperature": "C",
+            "humidity": "%",
+            "wind_speed": "m/s",
+        },
+        "cities": {},
+    }
+
+    if blob.exists():
+        try:
+            existing = json.loads(
+                blob.download_as_text(
+                    encoding="utf-8"
+                )
+            )
+
+            if isinstance(existing, dict):
+                document.update(existing)
+
+            if not isinstance(
+                document.get("cities"),
+                dict,
+            ):
+                document["cities"] = {}
+
+        except Exception as error:
+            print(
+                "Could not read existing "
+                f"processed/current.json: {error}"
+            )
+
+    updated_count = 0
+
+    for city_slug in CITIES:
+        current_data = current_results.get(city_slug)
+
+        if current_data is None:
+            print(
+                f"Keeping previous current snapshot "
+                f"for {city_slug}: "
+                "new current weather is missing."
+            )
+            continue
+
+        document["cities"][city_slug] = (
+            normalize_homepage_current(
+                city_slug=city_slug,
+                data=current_data,
+                collected_at=collected_at,
+            )
+        )
+
+        updated_count += 1
+
+    if updated_count == 0:
+        print(
+            "No current-weather results available; "
+            "processed/current.json was not changed."
+        )
+        return document
+
+    document["schema_version"] = 1
+    document["updated_at"] = datetime_to_iso(
+        collected_at
+    )
+
+    blob.upload_from_string(
+        json.dumps(
+            document,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        content_type="application/json",
+    )
+
+    print(
+        "Updated processed/current.json "
+        f"({updated_count} cities refreshed)"
+    )
+
+    return document
 
 # ============================================================
 # OpenWeather API
@@ -178,6 +346,8 @@ def run_current_weather_for_all_cities(
 ):
     print("\nFetching current weather...")
 
+    results = {}
+
     for city, coordinates in CITIES.items():
 
         print(
@@ -190,12 +360,7 @@ def run_current_weather_for_all_cities(
                 longitude=coordinates["longitude"],
             )
 
-            save_json_to_cloud_storage(
-                data=data,
-                city=city,
-                data_type="current_weather",
-                timestamp=timestamp,
-            )
+            results[city] = data
 
         except requests.RequestException as error:
             print(
@@ -209,6 +374,8 @@ def run_current_weather_for_all_cities(
                 f"for {city}: {error}"
             )
 
+    return results
+
 
 # ============================================================
 # Forecast collection
@@ -218,6 +385,8 @@ def run_forecast_for_all_cities(
     timestamp,
 ):
     print("\nFetching forecasts...")
+
+    results = {}
 
     for city, coordinates in CITIES.items():
 
@@ -231,12 +400,7 @@ def run_forecast_for_all_cities(
                 longitude=coordinates["longitude"],
             )
 
-            save_json_to_cloud_storage(
-                data=data,
-                city=city,
-                data_type="forecast",
-                timestamp=timestamp,
-            )
+            results[city] = data
 
         except requests.RequestException as error:
             print(
@@ -250,6 +414,67 @@ def run_forecast_for_all_cities(
                 f"for {city}: {error}"
             )
 
+    return results
+
+
+# ============================================================
+# Compact validation data
+# ============================================================
+
+def update_compact_validation_for_all_cities(
+    current_results,
+    forecast_results,
+    collected_at,
+):
+    print("\nUpdating compact validation data...")
+
+    for city in CITIES:
+        current_data = current_results.get(city)
+        forecast_data = forecast_results.get(city)
+
+        if current_data is None:
+            print(
+                f"Skipping compact validation for {city}: "
+                "current weather is missing."
+            )
+            continue
+
+        if forecast_data is None:
+            print(
+                f"Skipping compact validation for {city}: "
+                "forecast is missing."
+            )
+            continue
+
+        forecast_city = forecast_data.get("city") or {}
+
+        city_name = (
+            forecast_city.get("name")
+            or current_data.get("name")
+            or city
+        )
+
+        try:
+            document = process_city_collection(
+                bucket_name=get_bucket_name(),
+                city_slug=city,
+                city_name=city_name,
+                current_data=current_data,
+                forecast_data=forecast_data,
+                collected_at=collected_at,
+            )
+
+            print(
+                f"Updated processed/{city}.json "
+                f"({len(document.get('points', []))} points)"
+            )
+
+        except Exception as error:
+            print(
+                f"Could not update compact validation "
+                f"for {city}: {error}"
+            )
+
 
 # ============================================================
 # One complete collection cycle
@@ -259,7 +484,10 @@ def run_collection_cycle(
     run_number,
     total_runs,
 ):
-    timestamp = create_timestamp()
+    collected_at = create_collection_time()
+    timestamp = format_collection_timestamp(
+        collected_at
+    )
 
     print("\n" + "=" * 60)
     print(
@@ -269,12 +497,27 @@ def run_collection_cycle(
     print(f"Run timestamp: {timestamp}")
     print("=" * 60)
 
-    run_current_weather_for_all_cities(
-        timestamp=timestamp
+    current_results = (
+        run_current_weather_for_all_cities(
+            timestamp=timestamp
+        )
     )
 
-    run_forecast_for_all_cities(
-        timestamp=timestamp
+    update_current_snapshot(
+    current_results=current_results,
+    collected_at=collected_at,
+)
+
+    forecast_results = (
+        run_forecast_for_all_cities(
+            timestamp=timestamp
+        )
+    )
+
+    update_compact_validation_for_all_cities(
+        current_results=current_results,
+        forecast_results=forecast_results,
+        collected_at=collected_at,
     )
 
     print("\n" + "=" * 60)
